@@ -6,6 +6,7 @@ import itertools
 from six import iteritems
 
 from .exceptions import ConversionError, ModelConversionError, ValidationError
+from .undefined import Undefined
 
 try:
     basestring #PY2
@@ -30,7 +31,7 @@ except:
 ###
 
 def import_loop(cls, instance_or_dict, field_converter, context=None,
-                partial=False, strict=False, mapping=None):
+                partial=False, strict=False, mapping=None, apply_defaults=True):
     """
     The import loop is designed to take untrusted data and convert it into the
     native types, as described in ``cls``.  It does this by calling
@@ -52,6 +53,10 @@ def import_loop(cls, instance_or_dict, field_converter, context=None,
         definitions. Default: False
     :param strict:
         Complain about unrecognized keys. Default: False
+    :param apply_defaults:
+        Initialize fields to their default values if not present in input data.
+        When `False``, all unspecified fields will be initialized to ``Undefined``. 
+        Default: True
     """
     is_dict = isinstance(instance_or_dict, dict)
     is_cls = isinstance(instance_or_dict, cls)
@@ -66,9 +71,9 @@ def import_loop(cls, instance_or_dict, field_converter, context=None,
     # Determine all acceptable field input names
     all_fields = set(cls._fields) ^ set(cls._serializables)
     for field_name, field, in iteritems(cls._fields):
-        if hasattr(field, 'serialized_name'):
+        if field.serialized_name:
             all_fields.add(field.serialized_name)
-        if hasattr(field, 'deserialize_from'):
+        if field.deserialize_from:
             all_fields.update(set(_list_or_string(field.deserialize_from)))
         if field_name in mapping:
             all_fields.update(set(_list_or_string(mapping[field_name])))
@@ -86,20 +91,23 @@ def import_loop(cls, instance_or_dict, field_converter, context=None,
         trial_keys.extend(mapping.get(field_name, []))
         trial_keys.extend([serialized_field_name, field_name])
 
-        raw_value = None
+        raw_value = cls._options.undefined
+        value_found = False
         for key in trial_keys:
             if key and key in instance_or_dict:
                 raw_value = instance_or_dict[key]
-        if raw_value is None:
-            if field_name in data:
-                continue
-            raw_value = field.default
+                value_found = True
+        if raw_value == Undefined and field_name in data:
+            continue
+        if not value_found:
+            if apply_defaults or field.default == Undefined:
+                raw_value = field.default
 
         try:
-            if raw_value is None:
+            if raw_value == Undefined or raw_value is None:
                 if field.required and not partial:
                     errors[serialized_field_name] = [field.messages['required']]
-            else:
+            else: # elif raw_value is not None (if required fields should accept `None`)
                 try:
                     mapping_by_model = mapping.get('model_mapping', {})
                     model_mapping = mapping_by_model.get(field_name, {})
@@ -121,7 +129,8 @@ def import_loop(cls, instance_or_dict, field_converter, context=None,
 
 
 def export_loop(cls, instance_or_dict, field_converter,
-                role=None, raise_error_on_role=False, print_none=False):
+                role=None, raise_error_on_role=False, print_none=False,
+                serialize_when_undefined=None):
     """
     The export_loop function is intended to be a general loop definition that
     can be used for any form of data shaping, such as application of roles or
@@ -142,8 +151,11 @@ def export_loop(cls, instance_or_dict, field_converter,
         This parameter enforces strict behavior which requires substructures
         to have the same role definition as their parent structures.
     :param print_none:
-        This function overrides ``serialize_when_none`` values found either on
-        ``cls`` or an instance.
+        When ``True``, this parameter overrides ``serialize_when_none`` values
+        found either on ``cls`` or an instance.
+    :param serialize_when_undefined:
+        This parameter overrides ``serialize_when_undefined`` values found
+        either on ``cls`` or an instance.
     """
     data = {}
 
@@ -165,26 +177,26 @@ def export_loop(cls, instance_or_dict, field_converter,
             continue
 
         # Value found, apply transformation and store it
-        elif value is not None:
+        elif value != Undefined and value is not None:
             if hasattr(field, 'export_loop'):
-                shaped = field.export_loop(value, field_converter,
-                                           role=role,
-                                           print_none=print_none)
+                shaped = field.export_loop(
+                             value, field_converter,
+                             role=role, print_none=print_none,
+                             serialize_when_undefined=serialize_when_undefined)
             else:
                 shaped = field_converter(field, value)
 
             # Print if we want none or found a value
-            if shaped is None and allow_none(cls, field):
+            if shaped is None and allow_none(cls, field, print_none):
                 data[serialized_name] = shaped
             elif shaped is not None:
                 data[serialized_name] = shaped
-            elif print_none:
-                data[serialized_name] = shaped
 
-        # Store None if reqeusted
-        elif value is None and allow_none(cls, field):
-            data[serialized_name] = value
-        elif print_none:
+        # Store None/Undefined if requested
+        elif value == Undefined \
+          and allow_undefined(cls, field, serialize_when_undefined):
+            data[serialized_name] = value.export_repr(field)
+        elif value is None and allow_none(cls, field, print_none):
             data[serialized_name] = value
 
     # Return data if the list contains anything
@@ -214,7 +226,7 @@ def atoms(cls, instance_or_dict):
             for field_name, field in all_fields)
 
 
-def allow_none(cls, field):
+def allow_none(cls, field, force=False):
     """
     This function inspects a model and a field for a setting either at the
     model or field level for the ``serialize_when_none`` setting.
@@ -226,10 +238,37 @@ def allow_none(cls, field):
         The model definition.
     :param field:
         The field in question.
+    :param force:
+        A parameter to force output; i.e., overrides the other settings when True.
     """
     allowed = cls._options.serialize_when_none
     if field.serialize_when_none is not None:
         allowed = field.serialize_when_none
+    if force:
+        allowed = force
+    return allowed
+
+
+def allow_undefined(cls, field, override=None):
+    """
+    This function inspects a model and a field for a setting either at the
+    model or field level for the ``serialize_when_undefined`` setting.
+
+    The setting defaults to the value of the class.  A field can override the
+    class setting with it's own ``serialize_when_undefined`` setting.
+
+    :param cls:
+        The model definition.
+    :param field:
+        The field in question.
+    :param override:
+        A parameter to override the other settings.
+    """
+    allowed = cls._options.serialize_when_undefined
+    if field.serialize_when_undefined != None:
+        allowed = field.serialize_when_undefined
+    if override is not None:
+        allowed = override
     return allowed
 
 
@@ -380,7 +419,7 @@ def blacklist(*field_list):
 
 
 def convert(cls, instance_or_dict, context=None, partial=True, strict=False,
-            mapping=None):
+            mapping=None, apply_defaults=True):
     def field_converter(field, value, mapping=None):
         try:
             return field.to_native(value, mapping=mapping)
@@ -388,7 +427,8 @@ def convert(cls, instance_or_dict, context=None, partial=True, strict=False,
             return field.to_native(value)
 #   field_converter = lambda field, value: field.to_native(value)
     data = import_loop(cls, instance_or_dict, field_converter, context=context,
-                       partial=partial, strict=strict, mapping=mapping)
+                       partial=partial, strict=strict, mapping=mapping,
+                       apply_defaults=apply_defaults)
     return data
 
 
@@ -402,7 +442,7 @@ def to_native(cls, instance_or_dict, role=None, raise_error_on_role=True,
 
 
 def to_primitive(cls, instance_or_dict, role=None, raise_error_on_role=True,
-                 context=None):
+                 context=None, serialize_when_undefined=None):
     """
     Implements serialization as a mechanism to convert ``Model`` instances into
     dictionaries keyed by field_names with the converted data as the values.
@@ -426,7 +466,8 @@ def to_primitive(cls, instance_or_dict, role=None, raise_error_on_role=True,
     field_converter = lambda field, value: field.to_primitive(value,
                                                               context=context)
     data = export_loop(cls, instance_or_dict, field_converter,
-                       role=role, raise_error_on_role=raise_error_on_role)
+                       role=role, raise_error_on_role=raise_error_on_role,
+                       serialize_when_undefined=serialize_when_undefined)
     return data
 
 

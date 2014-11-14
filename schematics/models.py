@@ -12,6 +12,7 @@ from .types.serializable import Serializable
 from .exceptions import BaseError, ModelValidationError, MockCreationError
 from .transforms import allow_none, atoms, flatten, expand
 from .transforms import to_primitive, to_native, convert
+from .undefined import Undefined
 from .validate import validate
 from .datastructures import OrderedDict as OrderedDictWithSort
 
@@ -78,7 +79,8 @@ class ModelOptions(object):
     """
 
     def __init__(self, klass, namespace=None, roles=None,
-                 serialize_when_none=True):
+                 serialize_when_none=True, serialize_when_undefined=True,
+                 undefined=Undefined):
         """
         :param klass:
             The class which this options instance belongs to.
@@ -90,11 +92,15 @@ class ModelOptions(object):
         :param serialize_when_none:
             When ``False``, serialization skips fields that are None.
             Default: ``True``
+        :param undefined:
+            Default: ``Undefined``
         """
         self.klass = klass
         self.namespace = namespace
         self.roles = roles or {}
         self.serialize_when_none = serialize_when_none
+        self.serialize_when_undefined = serialize_when_undefined
+        self.undefined = undefined
 
 
 class ModelMeta(type):
@@ -217,11 +223,13 @@ class Model(object):
     #__metaclass__ = ModelMeta
     __optionsclass__ = ModelOptions
 
-    def __init__(self, raw_data=None, deserialize_mapping=None, strict=True):
+    def __init__(self, raw_data=None, deserialize_mapping=None, strict=True,
+                 apply_defaults=True):
         if raw_data is None:
             raw_data = {}
         self._initial = raw_data
-        self._data = self.convert(raw_data, strict=strict, mapping=deserialize_mapping)
+        self._data = self.convert(raw_data, strict=strict, mapping=deserialize_mapping,
+                                  apply_defaults=apply_defaults)
 
     def validate(self, partial=False, strict=False):
         """
@@ -273,7 +281,7 @@ class Model(object):
     def to_native(self, role=None, context=None):
         return to_native(self.__class__, self, role=role, context=context)
 
-    def to_primitive(self, role=None, context=None):
+    def to_primitive(self, role=None, context=None, serialize_when_undefined=None):
         """Return data as it would be validated. No filtering of output unless
         role is defined.
 
@@ -281,7 +289,8 @@ class Model(object):
             Filter output by a specific role
 
         """
-        return to_primitive(self.__class__, self, role=role, context=context)
+        return to_primitive(self.__class__, self, role=role, context=context,
+                            serialize_when_undefined=serialize_when_undefined)
 
     def serialize(self, role=None, context=None):
         return self.to_primitive(role=role, context=context)
@@ -370,7 +379,10 @@ class Model(object):
     def __delitem__(self, name):
         if name not in self._data:
             raise KeyError(name)
-        return setattr(self, name, None)
+        undef = self._fields[name].default
+        if undef != Undefined:
+            undef = self._options.undefined
+        return setattr(self, name, undef)
 
     def __contains__(self, name):
         return name in self._data or name in self._serializables

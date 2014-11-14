@@ -13,6 +13,7 @@ from six import iteritems
 from ..exceptions import (
     StopValidation, ValidationError, ConversionError, MockCreationError
 )
+from ..undefined import Undefined
 
 try: 
     from string import ascii_letters # PY3
@@ -173,21 +174,29 @@ class BaseType(TypeMeta('BaseTypeBase', (object, ), {})):
         'choices': u"Value must be one of {0}.",
     }
 
-    def __init__(self, required=False, default=None, serialized_name=None,
+    def __init__(self, required=False, serialized_name=None,
                  choices=None, validators=None, deserialize_from=None,
-                 serialize_when_none=None, messages=None):
+                 serialize_when_none=None, serialize_when_undefined=None, 
+                 messages=None, **kwargs):
         super(BaseType, self).__init__()
         self.required = required
-        self._default = default
         self.serialized_name = serialized_name
         self.choices = choices
         self.deserialize_from = deserialize_from
+
+        if 'default' in kwargs:
+            self._default = kwargs['default']
+            self._default_set = True
+        else:
+            self._default = Undefined
+            self._default_set = False
 
         self.validators = [functools.partial(v, self) for v in self._validators]
         if validators:
             self.validators += validators
 
         self.serialize_when_none = serialize_when_none
+        self.serialize_when_undefined = serialize_when_undefined
         self.messages = dict(self.MESSAGES, **(messages or {}))
         self._position_hint = next(_next_position_hint)  # For ordering of fields
 
@@ -199,9 +208,14 @@ class BaseType(TypeMeta('BaseTypeBase', (object, ), {})):
 
     @property
     def default(self):
-        default = self._default
-        if callable(self._default):
-            default = self._default()
+        if self._default_set:
+            default = self._default
+        elif hasattr(self, 'owner_model'):
+            default = self.owner_model._options.undefined
+        else:
+            default = self._default
+        if callable(default):
+            default = default()
         return default
 
     def to_primitive(self, value, context=None):

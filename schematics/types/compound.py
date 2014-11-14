@@ -104,7 +104,7 @@ class ModelType(MultiType):
         return primitive_data
 
     def export_loop(self, model_instance, field_converter,
-                    role=None, print_none=False):
+                    role=None, print_none=False, serialize_when_undefined=None):
         """
         Calls the main `export_loop` implementation because they are both
         supposed to operate on models.
@@ -114,9 +114,9 @@ class ModelType(MultiType):
         else:
             model_class = self.model_class
 
-        shaped = export_loop(model_class, model_instance,
-                             field_converter,
-                             role=role, print_none=print_none)
+        shaped = export_loop(model_class, model_instance, field_converter,
+                             role=role, print_none=print_none,
+                             serialize_when_undefined=serialize_when_undefined)
 
         if shaped and len(shaped) == 0 and self.allow_none():
             return shaped
@@ -198,7 +198,7 @@ class ListType(MultiType):
         return [self.field.to_primitive(item, context) for item in value]
 
     def export_loop(self, list_instance, field_converter,
-                    role=None, print_none=False):
+                    role=None, print_none=False, serialize_when_undefined=None):
         """Loops over each item in the model and applies either the field
         transform or the multitype transform.  Essentially functions the same
         as `transforms.export_loop`.
@@ -206,8 +206,9 @@ class ListType(MultiType):
         data = []
         for value in list_instance:
             if hasattr(self.field, 'export_loop'):
-                shaped = self.field.export_loop(value, field_converter,
-                                                role=role)
+                shaped = self.field.export_loop(
+                             value, field_converter, role=role,
+                             serialize_when_undefined=serialize_when_undefined)
                 feels_empty = shaped and len(shaped) == 0
             else:
                 shaped = field_converter(self.field, value)
@@ -276,7 +277,7 @@ class DictType(MultiType):
                     for k, v in iteritems(value))
 
     def export_loop(self, dict_instance, field_converter,
-                    role=None, print_none=False):
+                    role=None, print_none=False, serialize_when_undefined=None):
         """Loops over each item in the model and applies either the field
         transform or the multitype transform.  Essentially functions the same
         as `transforms.export_loop`.
@@ -285,8 +286,9 @@ class DictType(MultiType):
 
         for key, value in iteritems(dict_instance):
             if hasattr(self.field, 'export_loop'):
-                shaped = self.field.export_loop(value, field_converter,
-                                                role=role)
+                shaped = self.field.export_loop(
+                             value, field_converter, role=role,
+                             serialize_when_undefined=serialize_when_undefined)
                 feels_empty = shaped and len(shaped) == 0
             else:
                 shaped = field_converter(self.field, value)
