@@ -261,7 +261,7 @@ class Model(object):
         """
         data = self.convert(raw_data, **kw)
         #[x * 2 if x % 2 == 0 else x for x in a_list]
-        del_keys = [ k for k in data.keys() if data[k] is None]
+        del_keys = [ k for k in data.keys() if data[k] == Undefined]
         for k in del_keys:
             del data[k]
 
