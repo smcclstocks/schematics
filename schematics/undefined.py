@@ -19,20 +19,27 @@ class UndefinedType(object):
     def __ne__(self, other):
         return not self == other
 
-    def __lt__(self, other):
-        return not self == other
-
-    def __gt__(self, other):
-        return False
-
-    def __le__(self, other):
-        return True
-
-    def __ge__(self, other):
-        return self == other
-
     def __nonzero__(self):
         return False
+
+    def __bool__(self):
+        return False
+
+    def __lt__(self, other):
+        self._cmp_err(other, '<')
+
+    def __gt__(self, other):
+        self._cmp_err(other, '>')
+
+    def __le__(self, other):
+        self._cmp_err(other, '<=')
+
+    def __ge__(self, other):
+        self._cmp_err(other, '>=')
+
+    def _cmp_err(self, other, op):
+        raise TypeError("unorderable types: {}() {} {}()".format(
+                        self.__class__.__name__, op, other.__class__.__name__))
 
     def __new__(cls, *args, **kwargs):
         if cls not in cls.__instances:

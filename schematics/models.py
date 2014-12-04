@@ -10,7 +10,7 @@ from .types import BaseType
 from .types.compound import ModelType
 from .types.serializable import Serializable
 from .exceptions import BaseError, ModelValidationError, MockCreationError
-from .transforms import allow_none, atoms, flatten, expand
+from .transforms import allow_none, allow_undefined, atoms, flatten, expand
 from .transforms import to_primitive, to_native, convert
 from .undefined import Undefined
 from .validate import validate
@@ -328,6 +328,16 @@ class Model(object):
         the class setting with it's own ``serialize_when_none`` setting.
         """
         return allow_none(cls, field)
+
+    @classmethod
+    def allow_undefined(cls, field):
+        """
+        Inspects a field and class for ``serialize_when_undefined`` setting.
+
+        The setting defaults to the value of the class.  A field can override
+        the class setting with it's own ``serialize_when_undefined`` setting.
+        """
+        return allow_undefined(cls, field)
 
     def __iter__(self):
         return self.iter()
