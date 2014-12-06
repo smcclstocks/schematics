@@ -186,10 +186,8 @@ class BaseType(TypeMeta('BaseTypeBase', (object, ), {})):
 
         if 'default' in kwargs:
             self._default = kwargs['default']
-            self._default_set = True
         else:
-            self._default = Undefined
-            self._default_set = False
+            self._default = Undefined # signifies "no default"
 
         self.validators = [functools.partial(v, self) for v in self._validators]
         if validators:
@@ -208,12 +206,7 @@ class BaseType(TypeMeta('BaseTypeBase', (object, ), {})):
 
     @property
     def default(self):
-        if self._default_set:
-            default = self._default
-        elif hasattr(self, 'owner_model'):
-            default = self.owner_model._options.undefined
-        else:
-            default = self._default
+        default = self._default
         if callable(default):
             default = default()
         return default

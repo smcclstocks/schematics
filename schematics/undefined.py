@@ -1,9 +1,6 @@
 class UndefinedType(object):
 
-    __instances = {}
-
-    def export_repr(self, field):
-        return None
+    _instance = None
 
     def __str__(self):
         return 'Undefined'
@@ -12,12 +9,10 @@ class UndefinedType(object):
         return 'Undefined'
 
     def __eq__(self, other):
-        return (type(self) is type(other)
-                or (type(other) is UndefinedType
-                    and issubclass(type(self), UndefinedType)))
+        return self is other
 
     def __ne__(self, other):
-        return not self == other
+        return self is not other
 
     def __nonzero__(self):
         return False
@@ -42,23 +37,18 @@ class UndefinedType(object):
                         self.__class__.__name__, op, other.__class__.__name__))
 
     def __new__(cls, *args, **kwargs):
-        if cls not in cls.__instances:
-            cls.__instances[cls] = object.__new__(cls)
-        return cls.__instances[cls]
+        if cls._instance is None:
+            cls._instance = object.__new__(cls)
+        elif cls is not UndefinedType:
+            raise TypeError("type 'UndefinedType' is not an acceptable base type")
+        return cls._instance
 
     def __init__(self):
         pass
 
     def __setattr__(self, name, value):
-        if type(self) is UndefinedType:
-            raise TypeError("'UndefinedType' object does not support attribute assignment")
-        else:
-            return object.__setattr__(self, name, value)
+        raise TypeError("'UndefinedType' object does not support attribute assignment")
 
 
 Undefined = UndefinedType()
-
-
-def has_value(arg):
-    return arg != Undefined and arg is not None
 

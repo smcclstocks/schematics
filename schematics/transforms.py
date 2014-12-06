@@ -54,9 +54,10 @@ def import_loop(cls, instance_or_dict, field_converter, context=None,
     :param strict:
         Complain about unrecognized keys. Default: False
     :param apply_defaults:
-        Initialize fields to their default values if not present in input data.
-        When `False``, all unspecified fields will be initialized to ``Undefined``. 
-        Default: True
+        True:     Initialize missing fields to their default values.
+        False:    Fields not present in the input data will be initialized
+                  to `Undefined` even if they have an associated default value.
+        Default:  True
     """
     is_dict = isinstance(instance_or_dict, dict)
     is_cls = isinstance(instance_or_dict, cls)
@@ -92,19 +93,17 @@ def import_loop(cls, instance_or_dict, field_converter, context=None,
         trial_keys.extend([serialized_field_name, field_name])
 
         raw_value = cls._options.undefined
-        value_found = False
         for key in trial_keys:
             if key and key in instance_or_dict:
                 raw_value = instance_or_dict[key]
-                value_found = True
-        if raw_value == Undefined and field_name in data:
-            continue
-        if not value_found:
-            if apply_defaults or field.default == Undefined:
+        if raw_value is cls._options.undefined:
+            if field_name in data:
+                continue
+            if apply_defaults and field.default is not Undefined:
                 raw_value = field.default
 
         try:
-            if raw_value == Undefined or raw_value is None:
+            if raw_value in (Undefined, None):
                 if field.required and not partial:
                     errors[serialized_field_name] = [field.messages['required']]
             else: # elif raw_value is not None (if required fields should accept `None`)
@@ -177,7 +176,7 @@ def export_loop(cls, instance_or_dict, field_converter,
             continue
 
         # Value found, apply transformation and store it
-        elif value != Undefined and value is not None:
+        elif value not in (Undefined, None):
             if hasattr(field, 'export_loop'):
                 shaped = field.export_loop(
                              value, field_converter,
@@ -193,9 +192,12 @@ def export_loop(cls, instance_or_dict, field_converter,
                 data[serialized_name] = shaped
 
         # Store None/Undefined if requested
-        elif value == Undefined \
+        elif value is Undefined \
           and allow_undefined(cls, field, serialize_when_undefined):
-            data[serialized_name] = value.export_repr(field)
+            undef_render_func = getattr(field, '_render_undefined', None) \
+                          or getattr(field.owner_model, '_render_undefined', None) \
+                          or (lambda: None)
+            data[serialized_name] = undef_render_func()
         elif value is None and allow_none(cls, field, print_none):
             data[serialized_name] = value
 

@@ -389,9 +389,7 @@ class Model(object):
     def __delitem__(self, name):
         if name not in self._data:
             raise KeyError(name)
-        undef = self._fields[name].default
-        if undef != Undefined:
-            undef = self._options.undefined
+        undef = self._options.undefined
         return setattr(self, name, undef)
 
     def __contains__(self, name):
