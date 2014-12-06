@@ -79,8 +79,7 @@ class ModelOptions(object):
     """
 
     def __init__(self, klass, namespace=None, roles=None,
-                 serialize_when_none=True, serialize_when_undefined=True,
-                 undefined=Undefined):
+                 serialize_when_none=True, serialize_when_undefined=True):
         """
         :param klass:
             The class which this options instance belongs to.
@@ -100,7 +99,6 @@ class ModelOptions(object):
         self.roles = roles or {}
         self.serialize_when_none = serialize_when_none
         self.serialize_when_undefined = serialize_when_undefined
-        self.undefined = undefined
 
 
 class ModelMeta(type):
@@ -223,6 +221,8 @@ class Model(object):
     #__metaclass__ = ModelMeta
     __optionsclass__ = ModelOptions
 
+    _undefined_object = Undefined
+
     def __init__(self, raw_data=None, deserialize_mapping=None, strict=True,
                  apply_defaults=True):
         if raw_data is None:
@@ -231,7 +231,7 @@ class Model(object):
         self._data = self.convert(raw_data, strict=strict, mapping=deserialize_mapping,
                                   apply_defaults=apply_defaults)
 
-    def validate(self, partial=False, strict=False):
+    def validate(self, partial=False, strict=False, apply_defaults=True):
         """
         Validates the state of the model and adding additional untrusted data
         as well. If the models is invalid, raises ValidationError with error
@@ -246,7 +246,7 @@ class Model(object):
         """
         try:
             data = validate(self.__class__, self._data, partial=partial,
-                            strict=strict)
+                            strict=strict, apply_defaults=apply_defaults)
             self._data.update(**data)
         except BaseError as exc:
             raise ModelValidationError(exc.messages)

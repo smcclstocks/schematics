@@ -55,8 +55,9 @@ def import_loop(cls, instance_or_dict, field_converter, context=None,
         Complain about unrecognized keys. Default: False
     :param apply_defaults:
         True:     Initialize missing fields to their default values.
-        False:    Fields not present in the input data will be initialized
-                  to `Undefined` even if they have an associated default value.
+                  If the field definition has no default, use `Undefined`.
+        False:    Ignore field defaults. Fields that are not present in the
+                  input data will be initialized to `Undefined`.
         Default:  True
     """
     is_dict = isinstance(instance_or_dict, dict)
@@ -92,11 +93,11 @@ def import_loop(cls, instance_or_dict, field_converter, context=None,
         trial_keys.extend(mapping.get(field_name, []))
         trial_keys.extend([serialized_field_name, field_name])
 
-        raw_value = cls._options.undefined
+        raw_value = cls._undefined_object
         for key in trial_keys:
             if key and key in instance_or_dict:
                 raw_value = instance_or_dict[key]
-        if raw_value is cls._options.undefined:
+        if raw_value is cls._undefined_object:
             if field_name in data:
                 continue
             if apply_defaults and field.default is not Undefined:
@@ -125,6 +126,9 @@ def import_loop(cls, instance_or_dict, field_converter, context=None,
         raise ModelConversionError(errors)
 
     return data
+
+
+default_undef_render_func = lambda f: None
 
 
 def export_loop(cls, instance_or_dict, field_converter,
@@ -194,10 +198,9 @@ def export_loop(cls, instance_or_dict, field_converter,
         # Store None/Undefined if requested
         elif value is Undefined \
           and allow_undefined(cls, field, serialize_when_undefined):
-            undef_render_func = getattr(field, '_render_undefined', None) \
-                          or getattr(field.owner_model, '_render_undefined', None) \
-                          or (lambda: None)
-            data[serialized_name] = undef_render_func()
+            undef_render_func = getattr(field.owner_model, '_render_undefined',
+                                        default_undef_render_func)
+            data[serialized_name] = undef_render_func(field)
         elif value is None and allow_none(cls, field, print_none):
             data[serialized_name] = value
 

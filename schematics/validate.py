@@ -2,7 +2,8 @@ from .exceptions import BaseError, ValidationError, ModelConversionError
 from .transforms import import_loop
 
 
-def validate(cls, instance_or_dict, partial=False, strict=False, context=None):
+def validate(cls, instance_or_dict, partial=False, strict=False, context=None,
+             apply_defaults=True):
     """
     Validate some untrusted data using a model. Trusted data can be passed in
     the `context` parameter.
@@ -38,7 +39,8 @@ def validate(cls, instance_or_dict, partial=False, strict=False, context=None):
     # Loop across fields and coerce values
     try:
         data = import_loop(cls, instance_or_dict, field_converter,
-                           context=context, partial=partial, strict=strict)
+                           context=context, partial=partial, strict=strict,
+                           apply_defaults=apply_defaults)
     except ModelConversionError as mce:
         errors = mce.messages
 
