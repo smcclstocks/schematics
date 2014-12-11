@@ -198,8 +198,11 @@ def export_loop(cls, instance_or_dict, field_converter,
         # Store None/Undefined if requested
         elif value is Undefined \
           and allow_undefined(cls, field, serialize_when_undefined):
-            undef_render_func = getattr(field.owner_model, '_render_undefined',
-                                        default_undef_render_func)
+            if callable(serialize_when_undefined):
+                undef_render_func = serialize_when_undefined
+            else:
+                undef_render_func = getattr(field.owner_model, '_render_undefined',
+                                            default_undef_render_func)
             data[serialized_name] = undef_render_func(field)
         elif value is None and allow_none(cls, field, print_none):
             data[serialized_name] = value
