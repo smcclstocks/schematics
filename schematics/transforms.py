@@ -197,6 +197,7 @@ def export_loop(cls, instance_or_dict, field_converter,
 
         # Store None/Undefined if requested
         elif value is Undefined \
+          and allow_none(cls, field, print_none) \
           and allow_undefined(cls, field, serialize_when_undefined):
             if callable(serialize_when_undefined):
                 undef_render_func = serialize_when_undefined
@@ -205,7 +206,7 @@ def export_loop(cls, instance_or_dict, field_converter,
                                             default_undef_render_func)
             data[serialized_name] = undef_render_func(field)
         elif value is None and allow_none(cls, field, print_none):
-            data[serialized_name] = value
+            data[serialized_name] = None
 
     # Return data if the list contains anything
     if len(data) > 0:
