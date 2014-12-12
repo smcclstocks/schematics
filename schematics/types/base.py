@@ -180,14 +180,10 @@ class BaseType(TypeMeta('BaseTypeBase', (object, ), {})):
                  messages=None, **kwargs):
         super(BaseType, self).__init__()
         self.required = required
+        self._default = kwargs.get('default', Undefined)
         self.serialized_name = serialized_name
         self.choices = choices
         self.deserialize_from = deserialize_from
-
-        if 'default' in kwargs:
-            self._default = kwargs['default']
-        else:
-            self._default = Undefined # signifies "no default"
 
         self.validators = [functools.partial(v, self) for v in self._validators]
         if validators:
