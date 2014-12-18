@@ -5,7 +5,6 @@ from __future__ import division
 import functools
 
 from ..exceptions import ValidationError, ConversionError, ModelValidationError, StopValidation
-from ..transforms import export_loop, EMPTY_LIST, EMPTY_DICT
 from .base import BaseType
 
 from six import iteritems
@@ -23,15 +22,11 @@ class MultiType(BaseType):
 
         for validator in self.validators:
             try:
-                try:
-                    validator(value, meta=meta)
-                except TypeError:
-                    validator(value)
+                validator(value, meta=meta)
             except ModelValidationError as exc:
                 errors.update(exc.messages)
-            except StopValidation as exc:
-                errors.update(exc.messages)
-                break
+                if isinstance(exc, StopValidation):
+                    break
 
         if errors:
             raise ValidationError(errors)
@@ -57,6 +52,9 @@ class MultiType(BaseType):
         return field
 
 
+from ..transforms import export_loop, EMPTY_LIST, EMPTY_DICT
+
+
 class ModelType(MultiType):
 
     def __init__(self, model_class, **kwargs):
@@ -67,7 +65,6 @@ class ModelType(MultiType):
         self.strict = kwargs.pop("strict", True)
 
         def validate_model(model_instance, meta=None):
-            print("ModelType here, calling validate() on model", model_class.__name__)
             model_instance.validate(meta=meta)
             return model_instance
 
@@ -144,7 +141,7 @@ class ListType(MultiType):
         self.min_size = min_size
         self.max_size = max_size
 
-        validators = [self.check_length, self.validate_items] + kwargs.pop("validators", [])
+        validators = [self.check_length] + kwargs.pop("validators", [])
 
         super(ListType, self).__init__(validators=validators, **kwargs)
 
@@ -176,7 +173,7 @@ class ListType(MultiType):
 
         return [to_native(item, context) for item in items]
 
-    def check_length(self, value):
+    def check_length(self, value, meta=None):
         list_length = len(value) if value else 0
 
         if self.min_size is not None and list_length < self.min_size:
@@ -194,10 +191,14 @@ class ListType(MultiType):
             raise ValidationError(message)
 
     def validate_items(self, items, meta=None):
+        if isinstance(self.field, MultiType):
+            validate = functools.partial(self.field.validate, meta=meta)
+        else:
+            validate = self.field.validate
         errors = []
         for item in items:
             try:
-                self.field.validate(item, meta=meta)
+                validate(item)
             except ValidationError as exc:
                 errors += exc.messages
 
@@ -274,10 +275,14 @@ class DictType(MultiType):
                     for k, v in iteritems(value))
 
     def validate_items(self, items, meta=None):
+        if isinstance(self.field, MultiType):
+            validate = functools.partial(self.field.validate, meta=meta)
+        else:
+            validate = self.field.validate
         errors = {}
         for key, value in iteritems(items):
             try:
-                self.field.validate(value, meta=meta)
+                validate(value)
             except ValidationError as exc:
                 errors[key] = exc
 
