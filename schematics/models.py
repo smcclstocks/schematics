@@ -8,15 +8,11 @@ from six import iteritems
 from six import iterkeys
 from six import add_metaclass
 
-from .types import BaseType
-from .types.compound import ModelType
-from .types.serializable import Serializable
-from .exceptions import BaseError, ModelValidationError, MockCreationError
-from .transforms import allow_none, allow_undefined, atoms, flatten, expand
-from .transforms import to_primitive, to_native, convert
-from .undefined import Undefined
-from .validate import validate
 from .datastructures import OrderedDict as OrderedDictWithSort
+from .exceptions import BaseError, ModelValidationError, MockCreationError
+from .types.serializable import Serializable
+from .types import BaseType
+from .undefined import Undefined
 
 try:
     unicode #PY2
@@ -173,8 +169,15 @@ class ModelMeta(type):
             field.owner_model = klass
             if hasattr(field, 'field'):
                 set_owner_model(field.field, klass)
-        for field in fields.values():
+        for field_name, field in fields.items():
             set_owner_model(field, klass)
+            field.name = field_name
+
+        # Register class on ancestor models
+        klass._subclasses = []
+        for base in klass.__mro__[1:]:
+            if isinstance(base, ModelMeta):
+                base._subclasses.append(klass)
 
         return klass
 
@@ -216,6 +219,7 @@ class ModelMeta(type):
 #           self._unbound_fields.iteritems(),
 #           self._unbound_serializables.iteritems()
 #       )
+
 
 @add_metaclass(ModelMeta)
 class Model(object):
@@ -440,3 +444,9 @@ class Model(object):
 
     def __unicode__(self):
         return '%s object' % self.__class__.__name__
+
+
+from .transforms import allow_none, allow_undefined, atoms, flatten, expand
+from .transforms import to_primitive, to_native, convert
+from .types.compound import ModelType
+from .validate import validate

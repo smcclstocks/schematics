@@ -116,3 +116,4 @@ def _check_for_unknown_fields(cls, data):
         for field_name in rogues_found:
             errors[field_name] = [u'%s is an illegal field.' % field_name]
     return errors
+

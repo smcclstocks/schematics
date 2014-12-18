@@ -8,7 +8,6 @@ from six import iteritems
 from .datastructures import Environment
 from .exceptions import ConversionError, ModelConversionError, ValidationError
 from .undefined import Undefined
-from .types.compound import MultiType
 
 try:
     basestring #PY2
@@ -633,3 +632,5 @@ def flatten(cls, instance_or_dict, role=None, raise_error_on_role=True,
 
     return flattened
 
+
+from .types.compound import MultiType
