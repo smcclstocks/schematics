@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 
 from __future__ import division
+
+import functools
+
 from ..exceptions import ValidationError, ConversionError, ModelValidationError, StopValidation
 from ..transforms import export_loop, EMPTY_LIST, EMPTY_DICT
 from .base import BaseType
@@ -11,7 +14,7 @@ from six import text_type as unicode
 
 class MultiType(BaseType):
 
-    def validate(self, value):
+    def validate(self, value, meta=None):
         """Report dictionary of errors with lists of errors as values of each
         key. Used by ModelType and ListType.
 
@@ -20,7 +23,10 @@ class MultiType(BaseType):
 
         for validator in self.validators:
             try:
-                validator(value)
+                try:
+                    validator(value, meta=meta)
+                except TypeError:
+                    validator(value)
             except ModelValidationError as exc:
                 errors.update(exc.messages)
             except StopValidation as exc:
@@ -60,8 +66,9 @@ class ModelType(MultiType):
         validators = kwargs.pop("validators", [])
         self.strict = kwargs.pop("strict", True)
 
-        def validate_model(model_instance):
-            model_instance.validate()
+        def validate_model(model_instance, meta=None):
+            print("ModelType here, calling validate() on model", model_class.__name__)
+            model_instance.validate(meta=meta)
             return model_instance
 
         super(ModelType, self).__init__(validators=[validate_model] + validators, **kwargs)
@@ -69,11 +76,10 @@ class ModelType(MultiType):
     def __repr__(self):
         return object.__repr__(self)[:-1] + ' for %s>' % self.model_class
 
-    def to_native(self, value, mapping=None, context=None):
+    def to_native(self, value, mapping=None, context=None, meta=None):
         # We have already checked if the field is required. If it is None it
         # should continue being None
-        if mapping is None:
-            mapping = {}
+        mapping = mapping or {}
         if value is None:
             return None
         if isinstance(value, self.model_class):
@@ -88,7 +94,7 @@ class ModelType(MultiType):
         # partial submodels now available with import_data (ht ryanolson)
         model = self.model_class()
         return model.import_data(value, mapping=mapping, context=context,
-                                 strict=self.strict)
+                                 strict=self.strict, meta=meta)
 
     def to_primitive(self, model_instance, context=None):
         primitive_data = {}
@@ -161,10 +167,14 @@ class ListType(MultiType):
         except TypeError:
             return [value]
 
-    def to_native(self, value, context=None):
+    def to_native(self, value, context=None, meta=None):
         items = self._force_list(value)
+        if isinstance(self.field, MultiType):
+            to_native = functools.partial(self.field.to_native, meta=meta)
+        else:
+            to_native = self.field.to_native
 
-        return [self.field.to_native(item, context) for item in items]
+        return [to_native(item, context) for item in items]
 
     def check_length(self, value):
         list_length = len(value) if value else 0
@@ -183,11 +193,11 @@ class ListType(MultiType):
             }[self.max_size == 1]) % self.max_size
             raise ValidationError(message)
 
-    def validate_items(self, items):
+    def validate_items(self, items, meta=None):
         errors = []
         for item in items:
             try:
-                self.field.validate(item)
+                self.field.validate(item, meta=meta)
             except ValidationError as exc:
                 errors += exc.messages
 
@@ -248,23 +258,26 @@ class DictType(MultiType):
     def model_class(self):
         return self.field.model_class
 
-    def to_native(self, value, safe=False, context=None):
+    def to_native(self, value, safe=False, context=None, meta=None):
         if value == EMPTY_DICT:
             value = {}
-
         value = value or {}
-
         if not isinstance(value, dict):
             raise ValidationError(u'Only dictionaries may be used in a DictType')
 
-        return dict((self.coerce_key(k), self.field.to_native(v, context))
+        if isinstance(self.field, MultiType):
+            to_native = functools.partial(self.field.to_native, meta=meta)
+        else:
+            to_native = self.field.to_native
+
+        return dict((self.coerce_key(k), to_native(v, context))
                     for k, v in iteritems(value))
 
-    def validate_items(self, items):
+    def validate_items(self, items, meta=None):
         errors = {}
         for key, value in iteritems(items):
             try:
-                self.field.validate(value)
+                self.field.validate(value, meta=meta)
             except ValidationError as exc:
                 errors[key] = exc
 
