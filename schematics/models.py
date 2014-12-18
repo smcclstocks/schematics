@@ -224,14 +224,15 @@ class Model(object):
     _undefined_object = Undefined
 
     def __init__(self, raw_data=None, deserialize_mapping=None, strict=True,
-                 apply_defaults=True):
+                       partial=True, apply_defaults=True, env=None):
         if raw_data is None:
             raw_data = {}
         self._initial = raw_data
-        self._data = self.convert(raw_data, strict=strict, mapping=deserialize_mapping,
-                                  apply_defaults=apply_defaults)
+        self._data = self.convert(raw_data, mapping=deserialize_mapping,
+                                  strict=strict, partial=partial,
+                                  apply_defaults=apply_defaults, env=env)
 
-    def validate(self, partial=False, strict=False, apply_defaults=True):
+    def validate(self, partial=False, strict=False, apply_defaults=True, env=None):
         """
         Validates the state of the model and adding additional untrusted data
         as well. If the models is invalid, raises ValidationError with error
@@ -246,7 +247,7 @@ class Model(object):
         """
         try:
             data = validate(self.__class__, self._data, partial=partial,
-                            strict=strict, apply_defaults=apply_defaults)
+                            strict=strict, apply_defaults=apply_defaults, env=env)
             self._data.update(**data)
         except BaseError as exc:
             raise ModelValidationError(exc.messages)

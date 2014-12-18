@@ -1,9 +1,10 @@
 from .exceptions import BaseError, ValidationError, ModelConversionError
 from .transforms import import_loop
+from .types.compound import MultiType
 
 
 def validate(cls, instance_or_dict, partial=False, strict=False, context=None,
-             apply_defaults=True):
+                  apply_defaults=True, env=None):
     """
     Validate some untrusted data using a model. Trusted data can be passed in
     the `context` parameter.
@@ -31,16 +32,20 @@ def validate(cls, instance_or_dict, partial=False, strict=False, context=None,
     errors = {}
 
     # Function for validating an individual field
-    def field_converter(field, value):
-        value = field.to_native(value)
-        field.validate(value)
+    def field_converter(field, value, env=None):
+        if isinstance(field, MultiType):
+            value = field.to_native(value, env=env)
+            field.validate(value, env=env)
+        else:
+            value = field.to_native(value)
+            field.validate(value)
         return value
 
     # Loop across fields and coerce values
     try:
         data = import_loop(cls, instance_or_dict, field_converter,
                            context=context, partial=partial, strict=strict,
-                           apply_defaults=apply_defaults)
+                           apply_defaults=apply_defaults, env=env)
     except ModelConversionError as mce:
         errors = mce.messages
 
