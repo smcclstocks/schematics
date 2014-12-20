@@ -444,11 +444,12 @@ def convert(cls, instance_or_dict, context=None, partial=True, strict=False,
 
 
 def to_native(cls, instance_or_dict, role=None, raise_error_on_role=True,
-              context=None):
+              context=None, serialize_when_undefined=None):
     field_converter = lambda field, value: field.to_native(value,
                                                            context=context)
     data = export_loop(cls, instance_or_dict, field_converter,
-                       role=role, raise_error_on_role=raise_error_on_role)
+                       role=role, raise_error_on_role=raise_error_on_role,
+                       serialize_when_undefined=serialize_when_undefined)
     return data
 
 
