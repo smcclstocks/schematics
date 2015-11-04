@@ -6,7 +6,6 @@ from collections import Iterable
 import itertools
 
 from ..exceptions import ValidationError, ConversionError, ModelValidationError, StopValidation
-from ..models import Model
 from ..transforms import export_loop, EMPTY_LIST, EMPTY_DICT
 from .base import BaseType
 
@@ -94,19 +93,6 @@ class ModelType(MultiType):
         model = self.model_class()
         return model.import_data(value, mapping=mapping, context=context,
                                  strict=self.strict)
-
-    def to_primitive(self, model_instance, context=None):
-        primitive_data = {}
-        for field_name, field, value in model_instance.atoms():
-            serialized_name = field.serialized_name or field_name
-
-            if value is None and model_instance.allow_none(field):
-                primitive_data[serialized_name] = None
-            else:
-                primitive_data[serialized_name] = field.to_primitive(value,
-                                                                     context)
-
-        return primitive_data
 
     def export_loop(self, model_instance, field_converter,
                     role=None, print_none=False):
@@ -198,9 +184,6 @@ class ListType(MultiType):
         if errors:
             raise ValidationError(errors)
 
-    def to_primitive(self, value, context=None):
-        return [self.field.to_primitive(item, context) for item in value]
-
     def export_loop(self, list_instance, field_converter,
                     role=None, print_none=False):
         """Loops over each item in the model and applies either the field
@@ -274,10 +257,6 @@ class DictType(MultiType):
 
         if errors:
             raise ValidationError(errors)
-
-    def to_primitive(self, value, context=None):
-        return dict((unicode(k), self.field.to_primitive(v, context))
-                    for k, v in iteritems(value))
 
     def export_loop(self, dict_instance, field_converter,
                     role=None, print_none=False):
@@ -421,3 +400,5 @@ class PolyModelType(MultiType):
         elif print_none:
             return shaped
 
+
+from ..models import Model

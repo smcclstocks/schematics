@@ -475,6 +475,13 @@ class NumberType(BaseType):
 
         return value
 
+    def validate_is_a_number(self, value):
+        try:
+            self.number_class(value)
+        except (TypeError, ValueError):
+            raise ConversionError(self.messages['number_coerce']
+                                  .format(value, self.number_type.lower()))
+
     def validate_range(self, value):
         if self.min_value is not None and value < self.min_value:
             raise ValidationError(self.messages['number_min']
@@ -533,7 +540,7 @@ class DecimalType(BaseType):
     """
 
     MESSAGES = {
-        'number_coerce': "Number '{0}' failed to convert to a decimal.",
+        'number_coerce': u"Number '{0}' failed to convert to a decimal.",
         'number_min': u"Value should be greater than {0}.",
         'number_max': u"Value should be less than {0}.",
     }
@@ -555,7 +562,6 @@ class DecimalType(BaseType):
                 value = unicode(value)
             try:
                 value = decimal.Decimal(value)
-
             except (TypeError, decimal.InvalidOperation):
                 raise ConversionError(self.messages['number_coerce'].format(value))
 
